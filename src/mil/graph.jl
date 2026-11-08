@@ -227,9 +227,14 @@ function source(g::Graph)
     println(io, _BUILD_INFO)
     println(io, "{")
     println(io, "    func main<$(g.opset)>($args) {")
+    # Variables are never followed by "(", op names always are. Argument keys
+    # (`x` in `add(x = a, ...)`, `name` in `[name = ...]`) come right after
+    # "(", "[" or ", " and before " =": the first alternative matches them
+    # with their "=" and keeps them, so a variable whose name equals a key
+    # is renamed only where it is used as a value.
     rename = isempty(g.renames) ? nothing :
-        # Variables are never followed by "(", op names always are.
-        Regex("\\b(" * join(keys(g.renames), "|") * ")\\b(?!\\()") => (m -> g.renames[m])
+        Regex("(?:(?<=[(\\[])|(?<=, ))\\w+\\s*=(?!=)|\\b(?:" * join(keys(g.renames), "|") * ")\\b(?!\\()") =>
+            (m -> endswith(m, "=") ? m : g.renames[m])
     for line in g.body
         println(io, "        ", isnothing(rename) ? line : replace(line, rename))
     end

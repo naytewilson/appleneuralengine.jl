@@ -38,6 +38,19 @@ const M = AppleNeuralEngine.MIL
     @test !occursin(r"\bconst\b = ", src)            # no reserved words as names
     @test M.weight_blob(g) isa Vector{UInt8}
 
+    # an output whose producing variable shares its name with an argument key:
+    # the key stays, only the uses of the variable are renamed
+    g2 = M.Graph()
+    x2 = M.input(g2, :a, Float16, (1, 8, 1, 4))
+    r2 = M.relu(x2; name="x")
+    M.output!(g2, M.cast(M.add(r2, r2), Float32), :s)
+    M.output!(g2, r2, :r)
+    src2 = M.source(g2)
+    @test occursin("add(x = out001_r, y = out001_r)", src2)
+    @test occursin("relu(x = in000_a)", src2)
+    @test !occursin(r"[(,] out\d{3}_\w+ =", src2)
+    @test !occursin(r"\(out\d{3}_\w+ =", src2)
+
     @test_throws ArgumentError M.output!(g, x)        # an input cannot be an output
     @test_throws ArgumentError M.output!(g, M.greater(c, 0f0))
     @test_throws ArgumentError M.input(g, :late, Float32, (1, 4))   # inputs come first
