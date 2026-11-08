@@ -50,6 +50,17 @@ const M = AppleNeuralEngine.MIL
     @test occursin("relu(x = in000_a)", src2)
     @test !occursin(r"[(,] out\d{3}_\w+ =", src2)
     @test !occursin(r"\(out\d{3}_\w+ =", src2)
+    @test occursin("relu(x = in000_a)[name = string(\"out001_r\")]", src2)   # the op name follows its variable
+
+    # a variable named like a string literal: the literal stays
+    g3 = M.Graph()
+    x3 = M.input(g3, :a, Float16, (1, 8, 1, 4))
+    e3 = M.relu(x3; name="EXACT")
+    M.output!(g3, M.cast(M.gelu(e3; mode="EXACT"), Float32), :g)
+    M.output!(g3, e3, :e)
+    src3 = M.source(g3)
+    @test occursin("string(\"EXACT\")", src3)
+    @test occursin("gelu(x = out001_e", src3)
 
     @test_throws ArgumentError M.output!(g, x)        # an input cannot be an output
     @test_throws ArgumentError M.output!(g, M.greater(c, 0f0))
