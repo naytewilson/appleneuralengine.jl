@@ -227,9 +227,23 @@ function source(g::Graph)
     println(io, _BUILD_INFO)
     println(io, "{")
     println(io, "    func main<$(g.opset)>($args) {")
+    # Renaming happens token by token, left to right, and the first match wins:
+    # - `name = string("v")` is the op's name: renamed with its variable;
+    # - any other string literal (a mode, a dtype, a weight path) is kept;
+    # - argument keys (`x` in `add(x = a, ...)`, after "(", "[" or ", " and
+    #   before " =") are kept;
+    # - a remaining whole-word variable not followed by "(" (op names always
+    #   are) is renamed.
     rename = isempty(g.renames) ? nothing :
-        # Variables are never followed by "(", op names always are.
-        Regex("\\b(" * join(keys(g.renames), "|") * ")\\b(?!\\()") => (m -> g.renames[m])
+        Regex("name = string\\(\"\\w+\"\\)|\"[^\"]*\"|(?:(?<=[(\\[])|(?<=, ))\\w+\\s*=(?!=)|\\b(?:" *
+              join(keys(g.renames), "|") * ")\\b(?!\\()") => function (m)
+            if startswith(m, "name = string(\"")
+                v = m[16:end-2]
+                return haskey(g.renames, v) ? "name = string(\"$(g.renames[v])\")" : m
+            end
+            (startswith(m, "\"") || endswith(m, "=")) && return m
+            return g.renames[m]
+        end
     for line in g.body
         println(io, "        ", isnothing(rename) ? line : replace(line, rename))
     end
